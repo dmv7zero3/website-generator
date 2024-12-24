@@ -1,0 +1,48 @@
+{
+  "PK": { "S": "BUS#" },
+  "SK": { "S": "STATUS#active" },
+
+  "name": { "S": "" },
+  "website": { "S": "" },
+  "industry": { "S": "" },
+
+  "location": {
+    "M": {
+      "addressLine1": { "S": "" },
+      "addressLine2": { "S": "" },
+      "city": { "S": "" },
+      "state": { "S": "" },
+      "zipCode": { "S": "" }
+    }
+  },
+
+  "description": {
+    "M": {
+      "history": { "S": "" },
+      "audience": { "S": "" }
+    }
+  },
+
+  "serviceAreas": {
+    "L": [
+      {
+        "M": {
+          "city": { "S": "" },
+          "state": { "S": "" }
+        }
+      }
+    ]
+  },
+
+  "seoKeywords": {
+    "L": [{ "S": "" }]
+  },
+
+  "metadata": {
+    "M": {
+      "createdAt": { "S": "" },
+      "updatedAt": { "S": "" },
+      "version": { "N": "1" }
+    }
+  }
+}
