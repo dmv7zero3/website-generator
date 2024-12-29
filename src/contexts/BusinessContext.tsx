@@ -9,8 +9,8 @@ import React, {
 import { ApiService } from "@/lib/api";
 
 interface BusinessContextType {
-  selectedBusiness: string | null;
-  setSelectedBusiness: (id: string | null) => void;
+  selectedBusiness: string;
+  setSelectedBusiness: (id: string) => void;
   businesses: Array<{ id: string; name: string }>;
   loading: boolean;
   error: string | null;
@@ -24,12 +24,12 @@ interface BusinessCache {
 
 // Create context with initial values
 const BusinessContext = createContext<BusinessContextType>({
-  selectedBusiness: null,
+  selectedBusiness: "sls-dispensary",
   setSelectedBusiness: () => {},
   businesses: [],
   loading: false,
   error: null,
-  refreshBusinesses: async () => {}, // Add this line
+  refreshBusinesses: async () => {},
 });
 
 // Custom hook for using the context
@@ -42,81 +42,73 @@ export const useBusiness = () => {
 };
 
 export function BusinessProvider({ children }: { children: React.ReactNode }) {
-  const [selectedBusiness, setSelectedBusiness] = useState<string | null>(null);
+  const [selectedBusiness, setSelectedBusiness] =
+    useState<string>("sls-dispensary");
   const [businesses, setBusinesses] = useState<
     Array<{ id: string; name: string }>
   >([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const loadBusinesses = useCallback(
-    async (forceRefresh = false) => {
-      try {
-        setLoading(true);
-        setError(null);
+  const loadBusinesses = useCallback(async (forceRefresh = false) => {
+    try {
+      setLoading(true);
+      setError(null);
 
-        // Check cache if not forcing refresh
-        if (!forceRefresh) {
-          const cached = sessionStorage.getItem("businessList");
-          if (cached) {
-            const parsedCache: BusinessCache = JSON.parse(cached);
-            // Cache for 1 hour
-            if (Date.now() - parsedCache.timestamp < 3600000) {
-              setBusinesses(parsedCache.data);
-              if (!selectedBusiness && parsedCache.data.length > 0) {
-                setSelectedBusiness(parsedCache.data[0].id);
-              }
-              setLoading(false);
-              return;
-            }
+      // Check cache if not forcing refresh
+      if (!forceRefresh) {
+        const cached = sessionStorage.getItem("businessList");
+        if (cached) {
+          const parsedCache: BusinessCache = JSON.parse(cached);
+          // Cache for 1 hour
+          if (Date.now() - parsedCache.timestamp < 3600000) {
+            setBusinesses(parsedCache.data);
+            setLoading(false);
+            return;
           }
         }
-
-        const data = await ApiService.getBusinessList();
-        if (data && data.length > 0) {
-          const transformed = data.map((business) => ({
-            id: business.PK.S.replace("BUS#", ""),
-            name: business.name.S,
-          }));
-
-          // Update cache
-          const cache: BusinessCache = {
-            timestamp: Date.now(),
-            data: transformed,
-          };
-          sessionStorage.setItem("businessList", JSON.stringify(cache));
-
-          setBusinesses(transformed);
-          if (!selectedBusiness) {
-            setSelectedBusiness(transformed[0].id);
-          }
-        }
-      } catch (error) {
-        setError(
-          error instanceof Error ? error.message : "Failed to load businesses"
-        );
-        console.error("Failed to load businesses:", error);
-      } finally {
-        setLoading(false);
       }
-    },
-    [selectedBusiness]
-  );
+
+      const data = await ApiService.getBusinessList();
+      if (data && data.length > 0) {
+        const transformed = data.map((business) => ({
+          id: business.id.replace("BUS#", ""),
+          name: business.name,
+        }));
+
+        // Update cache
+        const cache: BusinessCache = {
+          timestamp: Date.now(),
+          data: transformed,
+        };
+        sessionStorage.setItem("businessList", JSON.stringify(cache));
+
+        setBusinesses(transformed);
+      }
+    } catch (error) {
+      setError(
+        error instanceof Error ? error.message : "Failed to load businesses"
+      );
+      console.error("Failed to load businesses:", error);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   // Initial load
   useEffect(() => {
     loadBusinesses();
-  }, []);
+  }, [loadBusinesses]);
 
   return (
     <BusinessContext.Provider
       value={{
         selectedBusiness,
-        setSelectedBusiness,
+        setSelectedBusiness: () => {}, // Disable changing the selected business
         businesses,
         loading,
         error,
-        refreshBusinesses: () => loadBusinesses(true), // Add refresh function
+        refreshBusinesses: () => loadBusinesses(true),
       }}
     >
       {children}

@@ -16,6 +16,8 @@
 import axios, { AxiosInstance, AxiosError } from "axios";
 import axiosRetry from "axios-retry";
 import { getEnvVar } from "./utils";
+
+import { transformers } from "./utils/transformers";
 import { GeneratedURL } from "@/components/dashboard/URLGeneration";
 
 // Constants
@@ -151,8 +153,8 @@ export interface BusinessService {
 }
 
 export interface BusinessProfileData {
-  PK: { S: string };
-  name: { S: string };
+  id: string;
+  name: string;
 }
 
 export interface BusinessProfile {
@@ -167,10 +169,12 @@ export interface BusinessProfile {
   business_zip: string;
   company_history_description?: string;
   target_audience_description?: string;
-  service_areas?: string[];
+  service_areas?: Array<{
+    city: string;
+    state: string;
+  }>;
   business_services?: string[];
   seoKeywords?: string[];
-  seoWebsites?: Array<{ website: { S: string } }>;
   prompts?: Array<{
     id: string;
     title: string;
@@ -185,6 +189,18 @@ export interface BusinessProfile {
       updatedAt: string;
     };
   }>;
+  seoWebsites: {
+    url: string;
+    id: string;
+    isActive: boolean;
+    name: string;
+  }[];
+  googleMapLocations?: Array<{
+    id: string;
+    name: string;
+    location: string;
+    locationId: string;
+  }>;
 }
 
 export interface DynamoDBBusinessProfile {
@@ -194,54 +210,35 @@ export interface DynamoDBBusinessProfile {
   website: { S: string };
   industry: { S: string };
   location: {
-    M: {
-      addressLine1: { S: string };
-      addressLine2: { S: string };
-      city: { S: string };
-      state: { S: string };
-      zipCode: { S: string };
-    };
+    addressLine1: string;
+    addressLine2: string;
+    city: string;
+    state: string;
+    zipCode: string;
   };
   description: {
-    M: {
-      history: { S: string };
-      audience: { S: string };
-    };
+    history: string;
+    audience: string;
   };
-  prompts: {
-    M: {
-      [id: string]: {
-        M: {
-          title: { S: string };
-          content: { S: string };
-          category: { S: string };
-          isActive: { BOOL: boolean };
-          variables: { L: Array<{ S: string }> };
-        };
-      };
-    };
-  };
-  serviceAreas: {
-    L: Array<{
-      M: {
-        city: { S: string };
-        state: { S: string };
-      };
-    }>;
-  };
-  businessServices: {
-    L: Array<{ S: string }>;
-  };
-  seoKeywords: {
-    L: Array<{ S: string }>;
-  };
+  serviceAreas: Array<{
+    city: string;
+    state: string;
+  }>;
+  businessServices?: Array<{ S: string }>;
+  seoKeywords?: Array<{ S: string }>;
   metadata: {
-    M: {
-      createdAt: { S: string };
-      updatedAt: { S: string };
-      version: { N: number };
-    };
+    createdAt: string;
+    updatedAt: string;
+    version: string;
   };
+  googleMapLocations?: Array<{
+    M: {
+      id: { S: string };
+      name: { S: string };
+      location: { S: string };
+      locationId: { S: string };
+    };
+  }>;
 }
 
 export interface URLEntry {
@@ -265,6 +262,11 @@ export class AppError extends Error {
     this.name = "AppError";
   }
 }
+interface ApiGatewayResponse<T> {
+  statusCode: number;
+  headers: { [key: string]: string };
+  body: string; // JSON string
+}
 
 // API Client setup
 const apiClient: AxiosInstance = axios.create({
@@ -287,113 +289,6 @@ axiosRetry(apiClient as any, {
   },
 });
 
-// Add transformer functions
-// Update transformers with proper typing
-export const transformers = {
-  fromDynamoDB(dbProfile: DynamoDBBusinessProfile): BusinessProfile {
-    return {
-      business_id: dbProfile.PK?.S?.replace("BUS#", "") || "",
-      business_name: dbProfile.name?.S || "",
-      business_website: dbProfile.website?.S || "",
-      business_industry: dbProfile.industry?.S || "",
-      business_address1: dbProfile.location?.M?.addressLine1?.S || "",
-      business_address2: dbProfile.location?.M?.addressLine2?.S || "",
-      business_city: dbProfile.location?.M?.city?.S || "",
-      business_state: dbProfile.location?.M?.state?.S || "",
-      business_zip: dbProfile.location?.M?.zipCode?.S || "",
-      company_history_description: dbProfile.description?.M?.history?.S || "",
-      target_audience_description: dbProfile.description?.M?.audience?.S || "",
-      service_areas:
-        dbProfile.serviceAreas?.L?.map(
-          (area) => `${area.M.city.S}, ${area.M.state.S}`
-        ) || [],
-      business_services:
-        dbProfile.businessServices?.L?.map((svc) => svc.S) || [],
-      seoKeywords: dbProfile.seoKeywords?.L?.map((keyword) => keyword.S) || [],
-      prompts: Object.entries(dbProfile.prompts?.M || {}).map(
-        ([id, prompt]) => ({
-          id,
-          title: prompt.M.title.S,
-          content: prompt.M.content.S,
-          category: prompt.M.category.S,
-          isActive: prompt.M.isActive?.BOOL ?? true,
-          variables:
-            prompt.M.variables?.L?.map((v: { S: string }) => v.S) || [],
-          metadata: {
-            createdAt:
-              dbProfile.metadata?.M?.createdAt?.S || new Date().toISOString(),
-            updatedAt:
-              dbProfile.metadata?.M?.updatedAt?.S || new Date().toISOString(),
-          },
-        })
-      ),
-    };
-  },
-
-  toDynamoDB(profile: BusinessProfile): Partial<DynamoDBBusinessProfile> {
-    return {
-      PK: { S: `BUS#${profile.business_id}` },
-      name: { S: profile.business_name },
-      website: { S: profile.business_website },
-      industry: { S: profile.business_industry },
-      location: {
-        M: {
-          addressLine1: { S: profile.business_address1 },
-          addressLine2: { S: profile.business_address2 || "" },
-          city: { S: profile.business_city },
-          state: { S: profile.business_state },
-          zipCode: { S: profile.business_zip },
-        },
-      },
-      description: {
-        M: {
-          history: { S: profile.company_history_description || "" },
-          audience: { S: profile.target_audience_description || "" },
-        },
-      },
-      // Add prompts here
-      prompts: {
-        M: (profile.prompts || []).reduce<Record<string, DynamoDBPrompt>>(
-          (acc, prompt) => ({
-            ...acc,
-            [prompt.id]: {
-              M: {
-                title: { S: prompt.title }, // Add title
-                content: { S: prompt.content },
-                category: { S: prompt.category },
-                isActive: { BOOL: prompt.isActive },
-                variables: {
-                  L: (prompt.variables || []).map((variable: string) => ({
-                    S: variable,
-                  })),
-                },
-              },
-            },
-          }),
-          {}
-        ),
-      },
-      serviceAreas: {
-        L: (profile.service_areas || []).map((area) => ({
-          M: {
-            city: { S: area.split(", ")[0] },
-            state: { S: area.split(", ")[1] },
-          },
-        })),
-      },
-      businessServices: {
-        L: (profile.business_services || []).map((service) => ({
-          S: service,
-        })),
-      },
-      seoKeywords: {
-        L: (profile.seoKeywords || []).map((keyword) => ({
-          S: keyword,
-        })),
-      },
-    };
-  },
-};
 // Update API methods to use transformers
 // In api.ts, modify the ApiService object
 
@@ -413,39 +308,23 @@ const ApiService = {
   // Active endpoint
   async getBusinessList(): Promise<BusinessProfileData[]> {
     try {
-      const response = await apiClient.get<BusinessListResponse>(
-        ENDPOINTS.BUSINESS_PROFILES
-      );
+      const response = await apiClient.get(ENDPOINTS.BUSINESS_PROFILES);
+      console.log("API Response Status:", response.status);
+      console.log("API Response Data:", response.data);
 
-      // Validate response
-      if (!response.data || !response.data.body) {
-        console.error("Invalid response structure:", response);
+      // Parse the API Gateway response
+      const apiResponse = response.data as ApiGatewayResponse<string>;
+
+      if (apiResponse.statusCode === 200 && apiResponse.body) {
+        // Parse the response body directly since it's already in the correct format
+        const data = JSON.parse(apiResponse.body) as BusinessProfileData[];
+        console.log("Parsed Business Profiles:", data);
+        return data;
+      } else {
+        console.warn("Unexpected API response structure:", apiResponse);
         return [];
       }
-
-      // Handle case where body is already parsed
-      const parsedData =
-        typeof response.data.body === "string"
-          ? JSON.parse(response.data.body)
-          : response.data.body;
-
-      // Validate parsed data
-      if (!Array.isArray(parsedData)) {
-        console.error("Invalid data structure:", parsedData);
-        return [];
-      }
-
-      // Transform and filter out invalid entries
-      return parsedData
-        .filter(
-          (item: any) =>
-            item && item.PK && item.PK.S && item.name && item.name.S
-        )
-        .map((item: BusinessItem) => ({
-          PK: { S: item.PK.S },
-          name: { S: item.name.S },
-        }));
-    } catch (error) {
+    } catch (error: any) {
       console.error("API Error:", {
         error,
         message: error instanceof Error ? error.message : "Unknown error",
@@ -805,6 +684,9 @@ const ApiService = {
         throw new Error("No data received");
       }
 
+      // Log the raw API response
+      console.log("Raw API Response:", JSON.parse(response.data.body));
+
       // Parse the nested body if needed
       const parsedBody =
         typeof response.data.body === "string"
@@ -812,31 +694,7 @@ const ApiService = {
           : response.data.body;
 
       // Transform DynamoDB format to BusinessProfile
-      return {
-        business_id: parsedBody.PK.S.replace("BUS#", ""),
-        business_name: parsedBody.name.S,
-        business_website: parsedBody.website.S,
-        business_industry: parsedBody.industry.S,
-        business_address1: parsedBody.location?.M?.addressLine1?.S || "",
-        business_address2: parsedBody.location?.M?.addressLine2?.S || "",
-        business_city: parsedBody.location?.M?.city?.S || "",
-        business_state: parsedBody.location?.M?.state?.S || "",
-        business_zip: parsedBody.location?.M?.zipCode?.S || "",
-        company_history_description:
-          parsedBody.description?.M?.history?.S || "",
-        target_audience_description:
-          parsedBody.description?.M?.audience?.S || "",
-        service_areas:
-          parsedBody.serviceAreas?.L?.map(
-            (area: any) => `${area.M.city.S}, ${area.M.state.S}`
-          ) || [],
-        seoKeywords: parsedBody.seoKeywords?.L?.map((k: any) => k.S) || [],
-        seoWebsites: Object.entries(parsedBody.seoWebsites?.M || {}).map(
-          ([url, data]: [string, any]) => ({
-            website: { S: url },
-          })
-        ),
-      };
+      return transformers.fromDynamoDB(parsedBody);
     } catch (error) {
       console.error("Error fetching business profile:", error);
       return null;

@@ -9,6 +9,8 @@ import { Button } from "@/components/ui/Button";
 import { Loader2, Save, RefreshCw } from "lucide-react";
 import { useToast } from "@/components/ui/UseToast";
 import { useBusiness } from "@/contexts/BusinessContext";
+import { DynamoDBAttribute } from "@/types/index"; // Add this import
+import LocalSEOPhotos from "@/components/dashboard/LocalSEOPhotos";
 
 interface DynamoDBProfile {
   PK: { S: string };
@@ -92,10 +94,8 @@ function transformDynamoDBToProfile(data: DynamoDBProfile): IBusinessProfile {
   const getLocationValue = (field: LocationField) => {
     const location = data.location;
     if ("M" in location) {
-      // DynamoDB format
       return location.M[field]?.S || "";
     } else {
-      // Plain object format
       return (location as any)[field] || "";
     }
   };
@@ -110,6 +110,31 @@ function transformDynamoDBToProfile(data: DynamoDBProfile): IBusinessProfile {
     }
   };
 
+  // Transform service areas to correct object format
+  const transformServiceAreas = () => {
+    if (Array.isArray(data.serviceAreas)) {
+      return data.serviceAreas.map((area) => ({
+        city: area.city,
+        state: area.state,
+      }));
+    }
+    return (
+      data.serviceAreas?.L?.map((area) => ({
+        city: area.M.city.S,
+        state: area.M.state.S,
+      })) || []
+    );
+  };
+
+  // Transform SEO websites to correct object format
+  const transformSeoWebsites = () =>
+    Object.entries(data.seoWebsites?.M || {}).map(([url, site]) => ({
+      url,
+      id: site.M.id?.S ?? "",
+      isActive: site.M.isActive?.BOOL ?? false,
+      name: site.M.name?.S ?? "",
+    }));
+
   return {
     business_id: data.PK.S.replace("BUS#", ""),
     business_name: data.name.S,
@@ -122,15 +147,13 @@ function transformDynamoDBToProfile(data: DynamoDBProfile): IBusinessProfile {
     business_zip: getLocationValue("zipCode"),
     company_history_description: getDescriptionValue("history"),
     target_audience_description: getDescriptionValue("audience"),
-    service_areas: Array.isArray(data.serviceAreas)
-      ? data.serviceAreas.map((area) => `${area.city}, ${area.state}`)
-      : data.serviceAreas?.L?.map(
-          (area) => `${area.M.city.S}, ${area.M.state.S}`
-        ) || [],
+    // Use the transformed service areas
+    service_areas: transformServiceAreas(),
     business_services: [],
     seoKeywords: Array.isArray(data.seoKeywords)
       ? data.seoKeywords
       : data.seoKeywords?.L?.map((keyword) => keyword.S) || [],
+    seoWebsites: transformSeoWebsites(),
   };
 }
 export default function BusinessProfile() {
@@ -151,51 +174,14 @@ export default function BusinessProfile() {
       console.group("Profile Loading Debug");
       console.log("Selected Business:", selectedBusiness);
 
-      const response = await fetch(
-        "https://wcvi65m780.execute-api.us-east-1.amazonaws.com/prod/website-generator/get-business-profile-details",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            "business-slug": selectedBusiness,
-          }),
-        }
+      const businessProfile = await ApiService.getBusinessProfile(
+        selectedBusiness
       );
-
-      const data = await response.json();
-      console.log("Raw API Response:", data);
-
-      if (response.ok) {
-        const parsedBody = JSON.parse(data.body);
-        console.log("Parsed DynamoDB Data:", parsedBody);
-
-        // Debug location data specifically
-        console.log("Location Data:", {
-          raw: parsedBody.location,
-          addressLine1: parsedBody.location?.M?.addressLine1?.S,
-          addressLine2: parsedBody.location?.M?.addressLine2?.S,
-          city: parsedBody.location?.M?.city?.S,
-          state: parsedBody.location?.M?.state?.S,
-          zipCode: parsedBody.location?.M?.zipCode?.S,
-        });
-
-        const transformedProfile = transformDynamoDBToProfile(parsedBody);
-        console.log("Transformed Profile:", transformedProfile);
-
-        // Debug address fields specifically
-        console.log("Address Fields:", {
-          address1: transformedProfile.business_address1,
-          address2: transformedProfile.business_address2,
-          city: transformedProfile.business_city,
-          state: transformedProfile.business_state,
-          zip: transformedProfile.business_zip,
-        });
-
-        setProfile(transformedProfile);
+      if (businessProfile) {
+        console.log("Fetched business profile:", businessProfile);
+        setProfile(businessProfile);
       } else {
-        throw new Error(data.error || "Failed to load profile");
+        throw new Error("Failed to load profile");
       }
       console.groupEnd();
     } catch (error) {
@@ -264,6 +250,28 @@ export default function BusinessProfile() {
             history: { S: profile.company_history_description || "" },
             audience: { S: profile.target_audience_description || "" },
           },
+        },
+        // Add service areas in correct DynamoDB format
+        serviceAreas: {
+          L:
+            profile.service_areas?.map((area) => ({
+              M: {
+                city: { S: area.city },
+                state: { S: area.state },
+              },
+            })) || [],
+        },
+        seoWebsites: {
+          M: profile.seoWebsites.reduce((acc, site) => {
+            acc[site.url] = {
+              M: {
+                id: { S: site.id },
+                isActive: { BOOL: site.isActive },
+                name: { S: site.name },
+              },
+            };
+            return acc;
+          }, {} as Record<string, { M: Record<string, DynamoDBAttribute<any>> }>),
         },
       };
 
@@ -456,6 +464,9 @@ export default function BusinessProfile() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Local SEO Photos Section */}
+      {selectedBusiness && <LocalSEOPhotos />}
     </div>
   );
 }

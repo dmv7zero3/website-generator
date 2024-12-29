@@ -1,19 +1,49 @@
-// src/components/dashboard/DashboardLayout.tsx
-import React from "react";
-import { Sidebar } from "./Sidebar";
+import React, { useState, ReactNode, useEffect } from "react";
 import { Header } from "./Header";
-import { BusinessProvider } from "@/contexts/BusinessContext";
+import PinPopup from "@/components/ui/PinPopup";
 
-export function DashboardLayout({ children }: { children: React.ReactNode }) {
+interface DashboardLayoutProps {
+  children: ReactNode;
+}
+
+export function DashboardLayout({ children }: DashboardLayoutProps) {
+  const [isPinValid, setIsPinValid] = useState<boolean>(false);
+  const [isPinPopupVisible, setIsPinPopupVisible] = useState<boolean>(true);
+  const [isLocked, setIsLocked] = useState<boolean>(true);
+
+  useEffect(() => {
+    if (isPinValid && !isLocked) {
+      setIsPinPopupVisible(false);
+    } else {
+      setIsPinPopupVisible(true);
+    }
+  }, [isPinValid, isLocked]);
+
+  const handlePinSubmit = (pin: string) => {
+    if (pin === "202") {
+      setIsPinValid(true);
+      setIsLocked(false);
+    } else {
+      // Handle incorrect PIN logic if needed
+    }
+  };
+
+  const handleLock = () => {
+    setIsLocked(true);
+  };
+
   return (
-    <BusinessProvider>
-      <div className="min-h-screen bg-background">
-        <Header />
-        <div className="flex h-[calc(100vh-4rem)]">
-          <Sidebar />
-          <main className="flex-1 p-8 overflow-y-auto">{children}</main>
-        </div>
-      </div>
-    </BusinessProvider>
+    <div>
+      <Header isPinValid={isPinValid} handleLock={handleLock} />
+      <main>
+        {isPinPopupVisible && (
+          <PinPopup
+            onClose={() => setIsPinPopupVisible(false)}
+            onSubmit={handlePinSubmit}
+          />
+        )}
+        {!isPinPopupVisible && children}
+      </main>
+    </div>
   );
 }

@@ -1,4 +1,7 @@
-// src/components/dashboard/Sidebar.tsx
+import React, { useState, useEffect } from "react";
+import { useLocation, Link } from "react-router-dom";
+import { useBusiness } from "@/contexts/BusinessContext";
+import { ApiService, BusinessProfileData } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { Button } from "../ui/Button";
 import {
@@ -14,75 +17,50 @@ import {
   ChevronLeft,
   ChevronRight,
   MapPin,
-  Building2,
   Globe,
   Image,
   MessageSquare,
-  CreditCard,
   Tags,
   FileText,
   Link as LinkIcon,
 } from "lucide-react";
-import { useLocation, Link } from "react-router-dom";
-import { useState, useEffect } from "react";
-import { useBusiness } from "@/contexts/BusinessContext";
-import { ApiService } from "@/lib/api";
-
-interface BusinessProfileData {
-  PK: { S: string };
-  name: { S: string };
-}
 
 export function Sidebar() {
-  const { selectedBusiness, setSelectedBusiness, businesses, loading } =
-    useBusiness();
-
+  const { selectedBusiness, setSelectedBusiness } = useBusiness();
   const [businessProfiles, setBusinessProfiles] = useState<
-    Array<{ id: string; name: string }>
+    BusinessProfileData[]
   >([]);
   const [isLoading, setIsLoading] = useState(true);
   const location = useLocation();
   const [isCollapsed, setIsCollapsed] = useState(false);
 
   const isActive = (path: string) => location.pathname === path;
+
   useEffect(() => {
     const fetchBusinessProfiles = async () => {
       try {
         setIsLoading(true);
+        console.log("Fetching business profiles...");
 
-        // First check localStorage
+        // Check localStorage for cached profiles
         const cachedProfiles = localStorage.getItem("businessProfiles");
         if (cachedProfiles) {
-          const parsed = JSON.parse(cachedProfiles);
-          setBusinessProfiles(parsed);
-
-          // Auto-select first business if none selected
-          if (!selectedBusiness && parsed.length > 0) {
-            setSelectedBusiness(parsed[0].id);
+          const parsedProfiles: BusinessProfileData[] =
+            JSON.parse(cachedProfiles);
+          setBusinessProfiles(parsedProfiles);
+          if (!selectedBusiness && parsedProfiles.length > 0) {
+            setSelectedBusiness(parsedProfiles[0].id);
           }
-
           setIsLoading(false);
           return;
         }
 
-        // If no cache, fetch from API
+        // Fetch from API if no cache
         const profiles = await ApiService.getBusinessList();
-        if (Array.isArray(profiles)) {
-          const transformed = profiles.map((profile) => ({
-            id: profile.PK.S.replace("BUS#", ""),
-            name: profile.name.S,
-          }));
-
-          // Save to localStorage
-          localStorage.setItem("businessProfiles", JSON.stringify(transformed));
-
-          // Update state
-          setBusinessProfiles(transformed);
-
-          // Auto-select first business if none selected
-          if (!selectedBusiness && transformed.length > 0) {
-            setSelectedBusiness(transformed[0].id);
-          }
+        setBusinessProfiles(profiles);
+        if (profiles.length > 0) {
+          setSelectedBusiness(profiles[0].id);
+          localStorage.setItem("businessProfiles", JSON.stringify(profiles));
         }
       } catch (error) {
         console.error("Failed to fetch business profiles:", error);
@@ -95,11 +73,7 @@ export function Sidebar() {
   }, [selectedBusiness, setSelectedBusiness]);
 
   const menuItems = [
-    {
-      title: "Dashboard",
-      icon: LayoutDashboard,
-      path: "/dashboard",
-    },
+    { title: "Dashboard", icon: LayoutDashboard, path: "/dashboard" },
     {
       title: "Business Profile",
       icon: Building,
@@ -110,33 +84,14 @@ export function Sidebar() {
       icon: MessageSquare,
       path: "/dashboard/prompts",
     },
-    {
-      title: "SEO Keywords",
-      icon: Tags,
-      path: "/dashboard/keywords",
-    },
-    {
-      title: "Service Areas",
-      icon: MapPin,
-      path: "/dashboard/service-areas",
-    },
-    {
-      title: "Website Management",
-      icon: Globe,
-      path: "/dashboard/websites",
-    },
+    { title: "SEO Keywords", icon: Tags, path: "/dashboard/keywords" },
+    { title: "Service Areas", icon: MapPin, path: "/dashboard/service-areas" },
+    { title: "Website Management", icon: Globe, path: "/dashboard/websites" },
     {
       title: "URL Generation",
       icon: LinkIcon,
       path: "/dashboard/url-generation",
     },
-
-    // {
-    //   title: "Business Services",
-    //   icon: Building2,
-    //   path: "/dashboard/business-services",
-    // },
-
     {
       title: "Generate Pages",
       icon: FileText,
@@ -196,9 +151,7 @@ export function Sidebar() {
               className={cn(
                 "w-full transition-all duration-300 justify-start",
                 isCollapsed ? "px-2" : "px-4",
-                {
-                  "bg-accent": isActive(item.path),
-                }
+                { "bg-accent": isActive(item.path) }
               )}
             >
               <item.icon

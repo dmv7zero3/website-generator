@@ -12,3 +12,6 @@ export * from "./UseToast";
 export * from "./Badge";
 export * from "./Textarea";
 export * from "./PhotoProgress";
+export * from "./PhotoUploadProgress";
+export * from "./UploadHistory";
+export * from "./UploadPopup";

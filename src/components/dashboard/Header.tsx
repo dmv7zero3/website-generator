@@ -1,8 +1,21 @@
-// src/components/dashboard/Header.tsx
 import { Button } from "../ui/Button";
-import { MoonIcon, SunIcon } from "lucide-react";
+import { Lock, Unlock } from "lucide-react";
 
-export function Header() {
+interface HeaderProps {
+  isPinValid: boolean;
+  handleLock: () => void;
+}
+
+export function Header({ isPinValid, handleLock }: HeaderProps) {
+  const handleLockToggle = () => {
+    if (isPinValid) {
+      handleLock();
+      console.log("Screen locked");
+    } else {
+      console.log("User needs to enter PIN");
+    }
+  };
+
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="container flex items-center justify-between h-16">
@@ -12,8 +25,12 @@ export function Header() {
           </h2>
         </div>
         <div className="flex items-center space-x-4">
-          <Button variant="ghost" size="icon">
-            <SunIcon className="w-5 h-5 transition-all scale-100 rotate-0" />
+          <Button variant="ghost" size="icon" onClick={handleLockToggle}>
+            {isPinValid ? (
+              <Lock className="w-5 h-5" />
+            ) : (
+              <Unlock className="w-5 h-5" />
+            )}
           </Button>
         </div>
       </div>
