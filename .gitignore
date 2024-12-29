@@ -7,3 +7,4 @@
 node_modules
 dist
 .cache
+python/sls_gbp_key.json
