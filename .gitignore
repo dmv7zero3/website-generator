@@ -8,3 +8,6 @@ node_modules
 dist
 .cache
 .python/sls_gbp_key.json
+python/sls_gbp_key.json
+src/components/dashboard/LocalSEOPhotos.tsx
+src/components/dashboard/LocalSEOPhotos\ copy\ 3.txt
